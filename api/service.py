@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SmartShiftService:
     """Main service class for SmartShift operations."""
-    
+
     def __init__(
         self,
         data_loader: WorkerDataLoader,
@@ -25,7 +25,7 @@ class SmartShiftService:
     ):
         """
         Initialize the service.
-        
+
         Args:
             data_loader: Worker data loader instance
             crew: SmartShift crew instance
@@ -35,73 +35,132 @@ class SmartShiftService:
         self.crew = crew
         self.query_builder = query_builder
         logger.info("SmartShiftService initialized")
-    
+
     def get_all_workers(self) -> List[Dict[str, Any]]:
-        """
-        Get all workers.
-        
-        Returns:
-            List of worker dictionaries
-        """
+        """Get all workers."""
         workers = self.data_loader.get_workers()
         return [self._worker_to_dict(w) for w in workers]
-    
-    def get_worker_by_id(self, worker_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific worker by ID.
-        
-        Args:
-            worker_id: Worker ID
-            
-        Returns:
-            Worker dictionary or None
-        """
+
+    def get_worker_by_id(
+        self, worker_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get a specific worker by ID."""
         worker = self.data_loader.get_worker_by_id(worker_id)
         return self._worker_to_dict(worker) if worker else None
-    
+
     def get_zone_statistics(self) -> Dict[str, Any]:
-        """
-        Get statistics for all zones.
-        
-        Returns:
-            Dictionary of zone statistics
-        """
+        """Get statistics for all zones."""
         return self.data_loader.get_zone_statistics()
-    
-    def process_overload_request(self, description: str) -> Dict[str, Any]:
+
+    def _build_diagnostics(self, execution_path: str) -> Dict[str, Any]:
+        """
+        Build diagnostics dictionary showing what components were used.
+
+        Args:
+            execution_path: 'crewai' or 'fallback'
+
+        Returns:
+            Dictionary with diagnostic information
+        """
+        # Vector store stats
+        try:
+            vs_stats = (
+                self.crew.retriever.vector_store.get_collection_stats()
+            )
+            vs_backend = vs_stats.get("backend", "faiss")
+            vs_workers = vs_stats.get("total_workers", 0)
+        except Exception:
+            vs_backend = "unknown"
+            vs_workers = 0
+
+        # Embedding model name
+        try:
+            embedding_model = getattr(
+                self.crew.embedder, "model_name", "unknown"
+            )
+        except Exception:
+            embedding_model = "unknown"
+
+        # LLM model name
+        try:
+            if self.crew.llm:
+                llm_model = getattr(
+                    self.crew.llm, "model_id",
+                    self.crew.settings.llm_model
+                )
+            else:
+                llm_model = "not configured"
+        except Exception:
+            llm_model = "unknown"
+
+        return {
+            "llm_used": bool(self.crew.llm),
+            "llm_model": llm_model,
+            "execution_path": execution_path,
+            "vector_store_used": True,
+            "vector_store_backend": vs_backend,
+            "vector_store_workers_indexed": vs_workers,
+            "embedding_model": embedding_model,
+            "watsonx_configured": (
+                self.crew.settings.validate_watsonx_credentials()
+            ),
+        }
+
+    def process_overload_request(
+        self, description: str
+    ) -> Dict[str, Any]:
         """
         Process an overload situation and generate recommendations.
-        
+
         Args:
             description: Natural language description of overload
-            
+
         Returns:
             Dictionary with recommendation or error
         """
         logger.info(f"Processing overload request: {description}")
-        
+
         try:
-            # Parse the description
-            parsed_query = self.query_builder.parse_overload_description(description)
-            
-            # Validate the query
-            is_valid, error_msg = self.query_builder.validate_query(parsed_query)
+            # Step 1: Parse the description
+            parsed_query = self.query_builder.parse_overload_description(
+                description
+            )
+
+            # Step 2: Validate the query
+            is_valid, error_msg = self.query_builder.validate_query(
+                parsed_query
+            )
             if not is_valid:
                 return {
                     'success': False,
                     'error': error_msg,
                     'parsed_query': parsed_query
                 }
-            
-            # Process with crew
-            result = self.crew.process_overload_request(description, parsed_query)
-            
-            # Add timestamp
+
+            # Step 3: Decide execution path
+            # Use CrewAI + LLM if configured, otherwise fallback
+            if self.crew.llm:
+                execution_path = "crewai"
+                logger.info("Using CrewAI + watsonx LLM path")
+                result = self.crew.run_with_crewai(
+                    description, parsed_query
+                )
+            else:
+                execution_path = "fallback"
+                logger.info("Using rule-based fallback path (no LLM)")
+                result = self.crew.process_overload_request(
+                    description, parsed_query
+                )
+
+            # Step 4: Add diagnostics to result
+            result['diagnostics'] = self._build_diagnostics(execution_path)
+
+            # Step 5: Add timestamp and parsed query
             result['timestamp'] = datetime.utcnow().isoformat()
             result['parsed_query'] = parsed_query
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error processing overload request: {e}")
             return {
@@ -109,7 +168,7 @@ class SmartShiftService:
                 'error': f"Internal error: {str(e)}",
                 'timestamp': datetime.utcnow().isoformat()
             }
-    
+
     def confirm_shift_change(
         self,
         worker_id: str,
@@ -119,35 +178,38 @@ class SmartShiftService:
     ) -> Dict[str, Any]:
         """
         Confirm and execute a shift change.
-        
+
         Args:
             worker_id: Worker ID
             from_zone: Source zone
             to_zone: Target zone
             confirmed_by: Manager name (optional)
-            
+
         Returns:
             Dictionary with confirmation result
         """
-        logger.info(f"Confirming shift change: {worker_id} from {from_zone} to {to_zone}")
-        
+        logger.info(
+            f"Confirming shift change: {worker_id} "
+            f"from {from_zone} to {to_zone}"
+        )
+
         try:
-            # Get worker
             worker = self.data_loader.get_worker_by_id(worker_id)
             if not worker:
                 return {
                     'success': False,
                     'message': f"Worker not found: {worker_id}"
                 }
-            
-            # Verify current zone
+
             if worker.current_zone.value != from_zone:
                 return {
                     'success': False,
-                    'message': f"Worker is not in {from_zone}. Current zone: {worker.current_zone.value}"
+                    'message': (
+                        f"Worker is not in {from_zone}. "
+                        f"Current zone: {worker.current_zone.value}"
+                    )
                 }
-            
-            # Update worker zone
+
             try:
                 new_zone = Zone(to_zone)
             except ValueError:
@@ -155,20 +217,24 @@ class SmartShiftService:
                     'success': False,
                     'message': f"Invalid zone: {to_zone}"
                 }
-            
-            success = self.data_loader.update_worker_zone(worker_id, new_zone)
-            
+
+            success = self.data_loader.update_worker_zone(
+                worker_id, new_zone
+            )
+
             if success:
-                # Get updated worker
-                updated_worker = self.data_loader.get_worker_by_id(worker_id)
-                
-                # Get updated zone statistics
+                updated_worker = self.data_loader.get_worker_by_id(
+                    worker_id
+                )
                 zone_stats = self.data_loader.get_zone_statistics()
-                
-                message = f"Successfully moved {worker.name} from {from_zone} to {to_zone}"
+
+                message = (
+                    f"Successfully moved {worker.name} "
+                    f"from {from_zone} to {to_zone}"
+                )
                 if confirmed_by:
                     message += f" (confirmed by {confirmed_by})"
-                
+
                 return {
                     'success': True,
                     'message': message,
@@ -180,61 +246,56 @@ class SmartShiftService:
                     'success': False,
                     'message': "Failed to update worker zone"
                 }
-                
+
         except Exception as e:
             logger.error(f"Error confirming shift change: {e}")
             return {
                 'success': False,
                 'message': f"Error: {str(e)}"
             }
-    
+
     def get_health_status(self) -> Dict[str, Any]:
-        """
-        Get system health status.
-        
-        Returns:
-            Dictionary with health information
-        """
+        """Get system health status."""
         components = {
             'data_loader': 'healthy',
             'vector_store': 'healthy',
             'embedder': 'healthy',
             'crew': 'healthy'
         }
-        
-        # Check if workers are loaded
+
+        # Check workers loaded
         try:
             workers = self.data_loader.get_workers()
             if not workers:
                 components['data_loader'] = 'no data'
         except Exception:
             components['data_loader'] = 'error'
-        
-        # Check if LLM is configured
+
+        # Check vector store
+        try:
+            stats = self.crew.retriever.vector_store.get_collection_stats()
+            if stats.get('total_workers', 0) == 0:
+                components['vector_store'] = 'empty'
+        except Exception:
+            components['vector_store'] = 'error'
+
+        # Check LLM
         if not self.crew.llm:
             components['crew'] = 'llm not configured (using fallback)'
-        
+
         overall_status = 'healthy' if all(
             v == 'healthy' for v in components.values()
         ) else 'degraded'
-        
+
         return {
             'status': overall_status,
             'version': '1.0.0',
             'components': components,
             'timestamp': datetime.utcnow().isoformat()
         }
-    
+
     def _worker_to_dict(self, worker: Worker) -> Dict[str, Any]:
-        """
-        Convert Worker model to dictionary.
-        
-        Args:
-            worker: Worker instance
-            
-        Returns:
-            Worker dictionary
-        """
+        """Convert Worker model to dictionary."""
         return {
             'worker_id': worker.worker_id,
             'name': worker.name,
