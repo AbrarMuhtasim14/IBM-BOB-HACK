@@ -29,11 +29,15 @@ class QueryBuilder:
         Shift.NIGHT: [r'night', r'10\s*pm', r'late', r'overnight']
     }
     
-    # Common skill keywords
+    # Common skill keywords (expanded list)
     SKILL_KEYWORDS = [
         'forklift', 'packing', 'quality', 'loading', 'inventory',
         'heavy equipment', 'order picker', 'shipping', 'coordinator',
-        'inspector', 'operator', 'specialist', 'manager'
+        'inspector', 'operator', 'specialist', 'manager', 'picker',
+        'driver', 'handler', 'assembler', 'sorter', 'checker',
+        'supervisor', 'lead', 'technician', 'mechanic', 'maintenance',
+        'cleaner', 'security', 'admin', 'clerk', 'receiver',
+        'dispatcher', 'planner', 'scheduler', 'analyst'
     ]
     
     def parse_overload_description(self, description: str) -> Dict[str, Optional[str]]:
@@ -82,28 +86,35 @@ class QueryBuilder:
     
     def _extract_skill(self, text: str) -> Optional[str]:
         """Extract skill requirement from text."""
-        # Look for skill keywords
+        # Look for skill keywords (case-insensitive, word boundary matching)
         found_skills = []
         for skill in self.SKILL_KEYWORDS:
-            if skill in text:
+            # Use word boundaries to avoid partial matches
+            pattern = r'\b' + re.escape(skill) + r'\b'
+            if re.search(pattern, text, re.IGNORECASE):
                 found_skills.append(skill)
         
         if found_skills:
             # Return the longest match (most specific)
             return max(found_skills, key=len)
         
-        # Try to extract skill from common patterns
+        # Try to extract skill from common patterns (more flexible)
         patterns = [
-            r'need\s+(\w+(?:\s+\w+)?)\s+(?:help|worker|operator)',
-            r'(?:require|requires)\s+(\w+(?:\s+\w+)?)',
-            r'(\w+(?:\s+\w+)?)\s+(?:is|are)\s+(?:needed|required)',
-            r'looking\s+for\s+(\w+(?:\s+\w+)?)'
+            r'need\s+(?:a\s+)?(\w+(?:\s+\w+){0,2})\s+(?:help|worker|operator|person|staff)',
+            r'(?:require|requires|requiring)\s+(?:a\s+)?(\w+(?:\s+\w+){0,2})',
+            r'(\w+(?:\s+\w+){0,2})\s+(?:is|are)\s+(?:needed|required|urgent)',
+            r'looking\s+for\s+(?:a\s+)?(\w+(?:\s+\w+){0,2})',
+            r'(?:get|find|send)\s+(?:a\s+)?(\w+(?:\s+\w+){0,2})\s+(?:to|for)',
+            r'(\w+(?:\s+\w+){0,2})\s+(?:shortage|overload|understaffed)'
         ]
         
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                skill = match.group(1).strip()
+                # Filter out common words that aren't skills
+                if skill.lower() not in ['the', 'a', 'an', 'this', 'that', 'some', 'any', 'more']:
+                    return skill
         
         return None
     

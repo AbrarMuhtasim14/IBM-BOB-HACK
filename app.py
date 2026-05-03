@@ -101,8 +101,8 @@ def initialize_system():
                 
                 # Initialize vector store
                 vector_store = get_vector_store(
-                    settings.chroma_persist_dir,
-                    settings.chroma_collection_name
+                    settings.faiss_persist_dir,
+                    settings.faiss_collection_name
                 )
                 
                 # Index workers
@@ -139,7 +139,24 @@ def initialize_system():
 def display_header():
     """Display the application header."""
     st.markdown('<div class="main-header">🏭 SmartShift - AI Workforce Optimizer</div>', unsafe_allow_html=True)
-    st.markdown("**Intelligent shift recommendations powered by IBM Granite AI**")
+    
+    # Check if LLM is configured
+    try:
+        from config.settings import get_settings
+        settings = get_settings()
+        if not settings.validate_watsonx_credentials():
+            st.warning(
+                "⚠️ **IBM watsonx.ai LLM not configured.** "
+                "The system is running in rule-based mode. "
+                "Configure WATSONX_API_KEY and WATSONX_PROJECT_ID in .env for full AI capabilities.",
+                icon="⚠️"
+            )
+            st.markdown("**Running in Rule-Based Mode** (Limited AI features)")
+        else:
+            st.markdown("**Intelligent shift recommendations powered by IBM Granite AI**")
+    except Exception:
+        st.markdown("**Intelligent shift recommendations powered by IBM Granite AI**")
+    
     st.markdown("---")
 
 
@@ -180,8 +197,9 @@ def display_worker_registry():
             col1, col2, col3, col4 = st.columns(4)
             zone_stats = service.get_zone_statistics()
             
-            for i, (zone, stats) in enumerate(zone_stats.items()):
-                with [col1, col2, col3, col4][i]:
+            # Use zip to safely iterate over columns and zone stats
+            for col, (zone, stats) in zip([col1, col2, col3, col4], zone_stats.items()):
+                with col:
                     st.metric(
                         label=zone,
                         value=f"{stats['total_workers']} workers",
@@ -352,9 +370,9 @@ def display_sidebar():
             SmartShift uses AI to optimize warehouse workforce allocation in real-time.
             
             **Powered by:**
-            - IBM Granite LLM
+            - IBM Granite LLM (watsonx.ai)
             - CrewAI Agents
-            - ChromaDB Vector Search
+            - FAISS Vector Search
             - Sentence Transformers
             """)
             

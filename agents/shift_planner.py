@@ -226,7 +226,7 @@ class ShiftPlannerService:
         
         Args:
             candidates: List of candidate workers
-            target_zone: Target zone
+            target_zone: Target zone (used for zone capacity analysis)
             
         Returns:
             Best candidate or None
@@ -234,13 +234,15 @@ class ShiftPlannerService:
         if not candidates:
             return None
         
+        from data.models import Zone
+        
         # Score each candidate
         scored_candidates = []
         for candidate in candidates:
             score = 0.0
             
-            # Match score (40%)
-            score += candidate.get('match_score', 0.5) * 0.4
+            # Match score (35%)
+            score += candidate.get('match_score', 0.5) * 0.35
             
             # Load status (30%) - prefer low load
             load_map = {'Low': 1.0, 'Medium': 0.6, 'High': 0.2}
@@ -250,16 +252,28 @@ class ShiftPlannerService:
             match_type_map = {'primary': 1.0, 'transferable': 0.8}
             score += match_type_map.get(candidate.get('match_type', 'transferable'), 0.7) * 0.2
             
-            # Zone capacity (10%) - can source zone spare them?
-            # This would require checking zone capacity
-            score += 0.1  # Simplified for now
+            # Zone capacity (15%) - can source zone spare them?
+            try:
+                source_zone = Zone(candidate.get('current_zone'))
+                source_workers = self.data_loader.get_workers_by_zone(source_zone)
+                available_count = sum(1 for w in source_workers if w.available and w.load_status.value == 'Low')
+                
+                # Higher score if source zone has more available low-load workers
+                if len(source_workers) > 0:
+                    capacity_ratio = available_count / len(source_workers)
+                    score += capacity_ratio * 0.15
+                else:
+                    score += 0.05  # Default if no workers
+            except Exception as e:
+                logger.warning(f"Could not calculate zone capacity for {candidate.get('name')}: {e}")
+                score += 0.05  # Default score
             
             candidate['selection_score'] = round(score, 3)
             scored_candidates.append(candidate)
         
         # Return highest scoring candidate
         best = max(scored_candidates, key=lambda x: x['selection_score'])
-        logger.info(f"Selected best candidate: {best['name']} (score: {best['selection_score']})")
+        logger.info(f"Selected best candidate: {best['name']} (score: {best['selection_score']}) for {target_zone}")
         
         return best
 

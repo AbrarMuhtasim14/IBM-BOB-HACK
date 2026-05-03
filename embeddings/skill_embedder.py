@@ -4,12 +4,20 @@ Generates vector embeddings for worker skills to enable semantic search.
 """
 from typing import List, Dict, Any
 import logging
-from sentence_transformers import SentenceTransformer
 import numpy as np
 
 from data.models import Worker
 
 logger = logging.getLogger(__name__)
+
+# Try to import sentence_transformers, fall back to simple embedder
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    logger.warning("sentence-transformers not available, using simple embedder fallback")
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    from embeddings.simple_embedder import SimpleEmbedder
 
 
 class SkillEmbedder:
@@ -24,14 +32,22 @@ class SkillEmbedder:
         """
         self.model_name = model_name
         self._model = None
-        logger.info(f"Initializing SkillEmbedder with model: {model_name}")
+        
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            logger.warning("Using SimpleEmbedder fallback")
+            self._model = SimpleEmbedder(model_name)
+        else:
+            logger.info(f"Initializing SkillEmbedder with model: {model_name}")
     
-    def _load_model(self) -> SentenceTransformer:
+    def _load_model(self):
         """Lazy load the sentence-transformers model."""
         if self._model is None:
-            logger.info(f"Loading sentence-transformers model: {self.model_name}")
-            self._model = SentenceTransformer(self.model_name)
-            logger.info("Model loaded successfully")
+            if SENTENCE_TRANSFORMERS_AVAILABLE:
+                logger.info(f"Loading sentence-transformers model: {self.model_name}")
+                self._model = SentenceTransformer(self.model_name)
+                logger.info("Model loaded successfully")
+            else:
+                self._model = SimpleEmbedder(self.model_name)
         return self._model
     
     def embed_text(self, text: str) -> List[float]:

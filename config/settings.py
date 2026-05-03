@@ -20,11 +20,11 @@ class Settings(BaseSettings):
         env="WATSONX_URL"
     )
     
-    # ChromaDB Configuration
-    chroma_persist_dir: str = Field(default="./chroma_db", env="CHROMA_PERSIST_DIR")
-    chroma_collection_name: str = Field(
+    # FAISS Vector Store Configuration
+    faiss_persist_dir: str = Field(default="./faiss_db", env="FAISS_PERSIST_DIR")
+    faiss_collection_name: str = Field(
         default="worker_skills",
-        env="CHROMA_COLLECTION_NAME"
+        env="FAISS_COLLECTION_NAME"
     )
     
     # Embedding Model Configuration
@@ -58,9 +58,9 @@ class Settings(BaseSettings):
         """Check if watsonx.ai credentials are configured."""
         return bool(self.watsonx_api_key and self.watsonx_project_id)
     
-    def get_chroma_path(self) -> Path:
-        """Get ChromaDB persistence directory as Path object."""
-        return Path(self.chroma_persist_dir)
+    def get_faiss_path(self) -> Path:
+        """Get FAISS persistence directory as Path object."""
+        return Path(self.faiss_persist_dir)
 
 
 # Global settings instance

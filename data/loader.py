@@ -26,9 +26,13 @@ class WorkerDataLoader:
             if not self.csv_path.exists():
                 raise FileNotFoundError(f"Worker CSV not found: {self.csv_path}")
             
-            # Read CSV with explicit UTF-8 encoding
-            df = pd.read_csv(self.csv_path, encoding='utf-8')
-            logger.info(f"Loaded {len(df)} workers from {self.csv_path}")
+            # Try UTF-16 first (common from Excel), fallback to UTF-8 with BOM handling
+            try:
+                df = pd.read_csv(self.csv_path, encoding='utf-16')
+                logger.info(f"Loaded {len(df)} workers from {self.csv_path} (UTF-16)")
+            except UnicodeDecodeError:
+                df = pd.read_csv(self.csv_path, encoding='utf-8-sig')
+                logger.info(f"Loaded {len(df)} workers from {self.csv_path} (UTF-8)")
             
             # Convert to Worker models
             workers = []

@@ -62,7 +62,7 @@ class WorkerRetriever:
         # Build filters
         filters = {}
         if only_available:
-            filters["available"] = "True"
+            filters["available"] = True  # Use boolean, not string
         if required_shift:
             filters["shift"] = required_shift.value
         
@@ -101,7 +101,7 @@ class WorkerRetriever:
                     'current_zone': metadata['current_zone'],
                     'shift': metadata['shift'],
                     'load_status': metadata['load_status'],
-                    'available': metadata['available'] == 'True',
+                    'available': metadata['available'],  # Already boolean
                     'match_score': round(match_score, 3),
                     'match_type': self._determine_match_type(
                         skill_query,
@@ -168,15 +168,16 @@ class WorkerRetriever:
         """
         filters = {
             "current_zone": zone.value,
-            "available": "True"
+            "available": True  # Use boolean, not string
         }
         
         if only_low_load:
             filters["load_status"] = LoadStatus.LOW.value
         
-        # Use a generic query to get all workers
+        # Use a broader query that will match skills_text content
+        # Search for common skill terms that appear in worker profiles
         results = self.vector_store.search_by_text(
-            query_text="worker",
+            query_text="",  # Empty string to match all when filtered
             n_results=100,
             filters=filters
         )
@@ -194,7 +195,7 @@ class WorkerRetriever:
                     'current_zone': metadata['current_zone'],
                     'shift': metadata['shift'],
                     'load_status': metadata['load_status'],
-                    'available': metadata['available'] == 'True'
+                    'available': metadata['available']  # Already boolean
                 }
                 
                 workers.append(worker_data)

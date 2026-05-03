@@ -95,6 +95,9 @@ class WorkerVectorStore:
             embeddings.append(profile["profile_embedding"])
             
             # Store metadata
+            # Convert transferable_skills list to semicolon-separated string for consistency
+            transferable_skills_str = ';'.join(profile["transferable_skills"]) if isinstance(profile["transferable_skills"], list) else profile["transferable_skills"]
+            
             meta = {
                 "id": profile["worker_id"],
                 "name": profile["name"],
@@ -102,8 +105,8 @@ class WorkerVectorStore:
                 "current_zone": profile["current_zone"],
                 "shift": profile["shift"],
                 "load_status": profile["load_status"],
-                "available": profile["available"],
-                "transferable_skills": profile["transferable_skills"],
+                "available": profile["available"],  # Store as boolean
+                "transferable_skills": transferable_skills_str,  # Store as string
                 "skills_text": profile["skills_text"]
             }
             metadata.append(meta)
@@ -216,8 +219,8 @@ class WorkerVectorStore:
         results = []
         
         for idx, meta in enumerate(self._metadata):
-            # Check if query matches skills text
-            if query_lower in meta["skills_text"].lower():
+            # Check if query matches skills text (empty query matches all)
+            if not query_text or query_lower in meta["skills_text"].lower():
                 # Apply filters
                 if filters:
                     match = True

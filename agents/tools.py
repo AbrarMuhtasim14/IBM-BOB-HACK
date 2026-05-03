@@ -9,16 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class BaseTool(BaseModel):
-    """Base class for custom tools."""
-    name: str
-    description: str
-    
-    class Config:
-        arbitrary_types_allowed = True
-
-
-class SearchWorkersTool(BaseTool):
+class SearchWorkersTool(BaseModel):
     """Tool for searching workers by skill."""
     
     name: str = "search_workers"
@@ -29,6 +20,9 @@ class SearchWorkersTool(BaseTool):
     )
     
     retriever: Any = Field(default=None, exclude=True)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def _run(self, skill: str, exclude_zone: Optional[str] = None) -> str:
         """Execute the search."""
@@ -69,7 +63,7 @@ class SearchWorkersTool(BaseTool):
             return f"Error searching for workers: {str(e)}"
 
 
-class GetWorkerDetailsTool(BaseTool):
+class GetWorkerDetailsTool(BaseModel):
     """Tool for getting detailed information about a specific worker."""
     
     name: str = "get_worker_details"
@@ -79,6 +73,9 @@ class GetWorkerDetailsTool(BaseTool):
     )
     
     data_loader: Any = Field(default=None, exclude=True)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def _run(self, worker_id: str) -> str:
         """Get worker details."""
@@ -103,7 +100,7 @@ class GetWorkerDetailsTool(BaseTool):
             return f"Error getting worker details: {str(e)}"
 
 
-class CheckZoneCapacityTool(BaseTool):
+class CheckZoneCapacityTool(BaseModel):
     """Tool for checking zone capacity and availability."""
     
     name: str = "check_zone_capacity"
@@ -113,6 +110,9 @@ class CheckZoneCapacityTool(BaseTool):
     )
     
     retriever: Any = Field(default=None, exclude=True)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def _run(self, zone: str) -> str:
         """Check zone capacity."""
@@ -135,7 +135,7 @@ class CheckZoneCapacityTool(BaseTool):
             return f"Error checking zone capacity: {str(e)}"
 
 
-class CalculateLoadImpactTool(BaseTool):
+class CalculateLoadImpactTool(BaseModel):
     """Tool for calculating load impact of moving a worker."""
     
     name: str = "calculate_load_impact"
@@ -145,6 +145,9 @@ class CalculateLoadImpactTool(BaseTool):
     )
     
     data_loader: Any = Field(default=None, exclude=True)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def _run(self, input_str: str) -> str:
         """Calculate load impact."""

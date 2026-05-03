@@ -71,7 +71,9 @@ class Worker(BaseModel):
         return load_map.get(self.load_status, 50)
     
     class Config:
-        use_enum_values = True
+        # Removed use_enum_values to avoid conflicts with typed enum fields
+        # Enums will be properly serialized when needed
+        pass
 
 
 class OverloadRequest(BaseModel):
